@@ -60,7 +60,9 @@ impl BlockHeader {
 }
 
 impl rlp::Encodable for BlockHeader {
-    fn rlp_append(&self, s: &mut RlpStream) { self.stream_rlp(s, false); }
+    fn rlp_append(&self, s: &mut RlpStream) {
+        self.stream_rlp(s, false);
+    }
 }
 
 impl rlp::Decodable for BlockHeader {

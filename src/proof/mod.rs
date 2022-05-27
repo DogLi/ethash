@@ -32,12 +32,7 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
     output
 }
 
-pub fn get_indices<F>(
-    header_hash: H256,
-    nonce: H64,
-    full_size: usize,
-    lookup: F,
-) -> Vec<u32>
+pub fn get_indices<F>(header_hash: H256, nonce: H64, full_size: usize, lookup: F) -> Vec<u32>
 where
     F: Fn(usize) -> [u32; HASH_LENGTH],
 {
@@ -90,10 +85,7 @@ pub fn calc_dataset_depth(epoch: usize) -> usize {
 
 /// Calculate the merkle tree and return a HashCache that can be used to
 /// calculating proofs and can be used to cache them to filesystem.
-pub fn calc_dataset_merkle_leaves(
-    epoch: usize,
-    dataset: &[u8],
-) -> (usize, Vec<mtree::DobuleLeaf>) {
+pub fn calc_dataset_merkle_leaves(epoch: usize, dataset: &[u8]) -> (usize, Vec<mtree::DobuleLeaf>) {
     let branch_depth = calc_dataset_depth(epoch);
     let leaves = dataset_leaves(epoch, dataset);
     (branch_depth, leaves)

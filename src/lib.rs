@@ -7,12 +7,12 @@ extern crate alloc;
 
 mod dag;
 mod miller_rabin;
-#[cfg(feature = "withproofs")]
+#[cfg(feature = "proof")]
 mod proof;
-#[cfg(feature = "withproofs")]
+#[cfg(feature = "proof")]
 pub use proof::*;
 
-pub use dag::{LightDAG};
+pub use dag::LightDAG;
 
 use core::ops::BitXor;
 
@@ -33,6 +33,10 @@ pub const HASH_BYTES: usize = 64;
 pub const DATASET_PARENTS: usize = 256;
 pub const CACHE_ROUNDS: usize = 3;
 pub const ACCESSES: usize = 64;
+pub const EPOCH_LENGTH: usize = 30_000;
+
+/// https://github.com/ethereumclassic/ECIPs/blob/master/_specs/ecip-1099.md
+pub const CLASSIC_EPOCH_LENGTH: usize = 60_000;
 
 /// Get the cache size required given the block number.
 pub fn get_cache_size(epoch: usize) -> usize {
@@ -107,6 +111,7 @@ fn fnv(v1: u32, v2: u32) -> u32 {
     (((v1 * 0x01000000) + (v1 * 0x193)) ^ v2) as _
 }
 
+#[cfg(feature = "proof")]
 fn fnv_mix_hash(mix: &mut [u32; 32], data: [u32; 32]) {
     for i in 0..32 {
         mix[i] = (mix[i].wrapping_mul(FNV_PRIME)).bitxor(data[i]);
@@ -193,7 +198,6 @@ pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
 
 #[cfg(feature = "std")]
 pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
-    use alloc::borrow::ToOwned;
     use rayon::prelude::*;
 
     let n = dataset.len() / HASH_BYTES;
@@ -389,37 +393,12 @@ pub fn mine<T: Encodable>(
 }
 
 /// Get the seedhash for a given block number.
-pub fn get_seedhash(epoch: usize) -> H256 {
+pub fn get_seedhash(block: usize) -> H256 {
+    let epoch = block / EPOCH_LENGTH;
+    println!("get block: {}, seed epoch: {}", block, epoch);
     let mut s = [0u8; 32];
     for _ in 0..epoch {
         fill_sha256(&s.clone(), &mut s, 0);
     }
     H256::from_slice(s.as_ref())
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{LightDAG};
-    use ethereum_types::{H256, H64};
-
-    #[test]
-    fn hashimoto_should_work() {
-        let light_dag = LightDAG::new(0x8947a9.into());
-        // bare_hash of block#8996777 on ethereum mainnet
-        let partial_header_hash = H256::from_slice(&hex::decode(
-            "3c2e6623b1de8862a927eeeef2b6b25dea6e1d9dad88dca3c239be3959dc384a"
-        ).unwrap());
-        let mixh = light_dag
-            .hashimoto(
-                partial_header_hash,
-                H64::from_slice(&hex::decode("a5d3d0ccc8bb8a29").unwrap()),
-            )
-            .0;
-        assert_eq!(
-            mixh,
-            H256::from_slice(&hex::decode(
-                "543bc0769f7d5df30e7633f4a01552c2cee7baace8a6da37fddaa19e49e81209"
-            ).unwrap())
-        );
-    }
 }

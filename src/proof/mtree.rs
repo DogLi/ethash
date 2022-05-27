@@ -1,6 +1,6 @@
+use alloc::{boxed::Box, vec, vec::Vec};
 use core::convert::TryInto;
 use core::ops::Deref;
-use alloc::{boxed::Box, vec, vec::Vec};
 
 use ethereum_types::H256;
 use lazy_static::lazy_static;
@@ -40,7 +40,9 @@ pub struct Word(pub [u8; WORD_LENGTH]);
 pub(super) struct BranchElement(pub [u8; BRANCH_ELEMENT_LENGTH]);
 
 impl Hash {
-    pub fn zero() -> Self { Self([0u8; HASH_LENGTH]) }
+    pub fn zero() -> Self {
+        Self([0u8; HASH_LENGTH])
+    }
 }
 
 impl Word {
@@ -90,7 +92,9 @@ impl Word {
 }
 
 impl From<[u8; HASH_LENGTH]> for Hash {
-    fn from(b: [u8; HASH_LENGTH]) -> Self { Self(b) }
+    fn from(b: [u8; HASH_LENGTH]) -> Self {
+        Self(b)
+    }
 }
 
 impl<'a> From<&'a [u8]> for Hash {
@@ -103,7 +107,9 @@ impl<'a> From<&'a [u8]> for Hash {
 }
 
 impl From<[u8; WORD_LENGTH]> for Word {
-    fn from(b: [u8; WORD_LENGTH]) -> Self { Self(b) }
+    fn from(b: [u8; WORD_LENGTH]) -> Self {
+        Self(b)
+    }
 }
 
 impl<'a> From<&'a [u8]> for Word {
@@ -116,7 +122,9 @@ impl<'a> From<&'a [u8]> for Word {
 }
 
 impl From<[u8; BRANCH_ELEMENT_LENGTH]> for BranchElement {
-    fn from(b: [u8; BRANCH_ELEMENT_LENGTH]) -> Self { Self(b) }
+    fn from(b: [u8; BRANCH_ELEMENT_LENGTH]) -> Self {
+        Self(b)
+    }
 }
 
 impl From<[Hash; 2]> for BranchElement {
@@ -140,25 +148,33 @@ impl From<[H256; 4]> for Word {
 }
 
 impl Into<[H256; 4]> for Word {
-    fn into(self) -> [H256; 4] { self.into_h256_array() }
+    fn into(self) -> [H256; 4] {
+        self.into_h256_array()
+    }
 }
 
 impl Deref for Hash {
     type Target = [u8; HASH_LENGTH];
 
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl Deref for Word {
     type Target = [u8; WORD_LENGTH];
 
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl Deref for BranchElement {
     type Target = [u8; BRANCH_ELEMENT_LENGTH];
 
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 pub(super) fn hash(a: &Hash, b: &Hash) -> Hash {
@@ -227,34 +243,29 @@ impl<'a> MerkleTree<'a> {
             0 => {
                 debug_assert_eq!(leaves.len(), 1);
                 Leaf(leaves[0])
-            },
+            }
             _ => {
                 // Split leaves into left and right subtrees
                 let subtree_capacity = 2usize.pow(depth as u32 - 1);
-                let (left_leaves, right_leaves) =
-                    if leaves.len() <= subtree_capacity {
-                        (leaves, EMPTY_SLICE)
-                    } else {
-                        leaves.split_at(subtree_capacity)
-                    };
+                let (left_leaves, right_leaves) = if leaves.len() <= subtree_capacity {
+                    (leaves, EMPTY_SLICE)
+                } else {
+                    leaves.split_at(subtree_capacity)
+                };
 
                 let left_subtree = MerkleTree::create(left_leaves, depth - 1);
                 let right_subtree = MerkleTree::create(right_leaves, depth - 1);
                 let h = hash(&left_subtree.hash(), &right_subtree.hash());
 
                 Node(h, Box::new(left_subtree), Box::new(right_subtree))
-            },
+            }
         }
     }
 
     /// Push an element in the MerkleTree.
     /// MerkleTree and depth must be correct, as the algorithm expects valid
     /// data.
-    pub fn push_leaf(
-        &mut self,
-        elem: &'a DobuleLeaf,
-        depth: usize,
-    ) -> Result<(), MerkleTreeError> {
+    pub fn push_leaf(&mut self, elem: &'a DobuleLeaf, depth: usize) -> Result<(), MerkleTreeError> {
         use MerkleTree::*;
 
         if depth == 0 {
@@ -265,30 +276,28 @@ impl<'a> MerkleTree<'a> {
             Leaf(_) => return Err(MerkleTreeError::LeafReached),
             Zero(_) => {
                 *self = MerkleTree::create(&[elem], depth);
-            },
+            }
             Node(ref mut h, ref mut left, ref mut right) => {
                 let left: &mut MerkleTree = &mut *left;
                 let right: &mut MerkleTree = &mut *right;
                 match (&*left, &*right) {
                     // Tree is full
-                    (Leaf(_), Leaf(_)) => {
-                        return Err(MerkleTreeError::MerkleTreeFull)
-                    },
+                    (Leaf(_), Leaf(_)) => return Err(MerkleTreeError::MerkleTreeFull),
                     // There is a right node so insert in right node
                     (Node(_, _, _), Node(_, _, _)) => {
                         if let Err(e) = right.push_leaf(elem, depth - 1) {
                             return Err(e);
                         }
-                    },
+                    }
                     // Both branches are zero, insert in left one
                     (Zero(_), Zero(_)) => {
                         *left = MerkleTree::create(&[elem], depth - 1);
-                    },
+                    }
                     // Leaf on left branch and zero on right branch, insert on
                     // right side
                     (Leaf(_), Zero(_)) => {
                         *right = MerkleTree::create(&[elem], depth - 1);
-                    },
+                    }
                     // Try inserting on the left node -> if it fails because it
                     // is full, insert in right side.
                     (Node(_, _, _), Zero(_)) => {
@@ -297,15 +306,15 @@ impl<'a> MerkleTree<'a> {
                             // Left node is full, insert in right node
                             Err(MerkleTreeError::MerkleTreeFull) => {
                                 *right = MerkleTree::create(&[elem], depth - 1);
-                            },
+                            }
                             Err(e) => return Err(e),
                         };
-                    },
+                    }
                     // All other possibilities are invalid MerkleTrees
                     (_, _) => return Err(MerkleTreeError::Invalid),
                 };
                 *h = hash(&left.hash(), &right.hash());
-            },
+            }
         }
 
         Ok(())
@@ -334,24 +343,20 @@ impl<'a> MerkleTree<'a> {
         match *self {
             MerkleTree::Leaf(_) | MerkleTree::Zero(0) => None,
             MerkleTree::Node(_, ref l, ref r) => Some((l, r)),
-            MerkleTree::Zero(depth) => {
-                Some((&ZERO_NODES[depth - 1], &ZERO_NODES[depth - 1]))
-            },
+            MerkleTree::Zero(depth) => Some((&ZERO_NODES[depth - 1], &ZERO_NODES[depth - 1])),
         }
     }
 
     /// Is this Merkle tree a leaf?
-    pub fn is_leaf(&self) -> bool { matches!(self, MerkleTree::Leaf(_)) }
+    pub fn is_leaf(&self) -> bool {
+        matches!(self, MerkleTree::Leaf(_))
+    }
 
     /// Return the leaf at `index` and a Merkle proof of its inclusion.
     ///
     /// The Merkle proof is in "bottom-up" order, starting with a leaf node
     /// and moving up the tree. Its length will be exactly equal to `depth`.
-    pub fn generate_proof(
-        &self,
-        index: usize,
-        depth: usize,
-    ) -> (Word, Hash, Vec<Hash>) {
+    pub fn generate_proof(&self, index: usize, depth: usize) -> (Word, Hash, Vec<Hash>) {
         let mut proof = vec![];
         let mut current_node = self;
         let mut current_depth = depth;
@@ -404,12 +409,7 @@ pub fn verify_merkle_proof(
 }
 
 /// Compute a root hash from a leaf and a Merkle proof.
-fn merkle_root_from_branch(
-    leaf: Hash,
-    branch: &[Hash],
-    depth: usize,
-    index: usize,
-) -> Hash {
+fn merkle_root_from_branch(leaf: Hash, branch: &[Hash], depth: usize, index: usize) -> Hash {
     assert_eq!(branch.len(), depth, "proof length should equal depth");
 
     let mut mroot = leaf;

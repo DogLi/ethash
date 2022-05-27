@@ -44,7 +44,9 @@ fn mul128(u: u64, v: u64) -> U128 {
         hi: u1 * v1 + w2 + k,
     }
 }
-fn mod_mul_(a: u64, b: u64, m: u64) -> u64 { modulo(mul128(a, b), m) }
+fn mod_mul_(a: u64, b: u64, m: u64) -> u64 {
+    modulo(mul128(a, b), m)
+}
 
 fn mod_mul(a: u64, b: u64, m: u64) -> u64 {
     match a.checked_mul(b) {
@@ -54,7 +56,7 @@ fn mod_mul(a: u64, b: u64, m: u64) -> u64 {
             } else {
                 r
             }
-        },
+        }
         None => mod_mul_(a, b, m),
     }
 }
