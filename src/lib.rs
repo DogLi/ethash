@@ -1,18 +1,12 @@
-//! Apache-2 licensed Ethash implementation.
-#![cfg_attr(not(feature = "std"), no_std)]
-
-extern crate alloc;
-
-// The reference algorithm used is from https://github.com/ethereum/wiki/wiki/Ethash
-
-mod dag;
+pub mod cache;
 mod miller_rabin;
 #[cfg(feature = "proof")]
 mod proof;
 #[cfg(feature = "proof")]
 pub use proof::*;
-
-pub use dag::LightDAG;
+#[macro_use]
+extern crate log;
+extern crate core;
 
 use core::ops::BitXor;
 
@@ -34,9 +28,11 @@ pub const DATASET_PARENTS: usize = 256;
 pub const CACHE_ROUNDS: usize = 3;
 pub const ACCESSES: usize = 64;
 pub const EPOCH_LENGTH: usize = 30_000;
+pub const ALGO_VERSION: u64 = 23;
 
 /// https://github.com/ethereumclassic/ECIPs/blob/master/_specs/ecip-1099.md
 pub const CLASSIC_EPOCH_LENGTH: usize = 60_000;
+pub const ETCHASH_FORK_BLOCK: u64 = 11_700_000;
 
 /// Get the cache size required given the block number.
 pub fn get_cache_size(epoch: usize) -> usize {
@@ -395,7 +391,6 @@ pub fn mine<T: Encodable>(
 /// Get the seedhash for a given block number.
 pub fn get_seedhash(block: usize) -> H256 {
     let epoch = block / EPOCH_LENGTH;
-    println!("get block: {}, seed epoch: {}", block, epoch);
     let mut s = [0u8; 32];
     for _ in 0..epoch {
         fill_sha256(&s.clone(), &mut s, 0);
