@@ -12,7 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::{fs, io};
 
-use crate::{make_cache, ALGO_VERSION, CLASSIC_EPOCH_LENGTH, EPOCH_LENGTH, ETCHASH_FORK_BLOCK};
+use crate::constant::{ALGO_VERSION, CLASSIC_EPOCH_LENGTH, EPOCH_LENGTH, ETCHASH_FORK_BLOCK};
+use crate::make_cache;
 
 fn get_epoch_len(block_number: u64, is_classic: bool) -> usize {
     if is_classic {

@@ -1,4 +1,5 @@
 pub mod cache;
+mod constant;
 mod miller_rabin;
 #[cfg(feature = "proof")]
 mod proof;
@@ -10,32 +11,22 @@ extern crate core;
 
 use core::ops::BitXor;
 
+use crate::constant::{
+    ACCESSES, CACHE_BYTES_GROWTH, CACHE_BYTES_INIT, CACHE_ROUNDS, CACHE_SIZES,
+    DATASET_BYTES_GROWTH, DATASET_BYTES_INIT, DATASET_PARENTS, DATASET_SIZES, EPOCH_LENGTH,
+    EPOCH_MAX, HASH_BYTES, MIX_BYTES, WORD_BYTES,
+};
 use byteorder::{ByteOrder, LittleEndian};
 use ethereum_types::{BigEndianHash, H256, H512, H64, U256, U64};
 use miller_rabin::is_prime;
 use rlp::Encodable;
 use sha3::{Digest, Keccak256, Keccak512};
 
-pub const DATASET_BYTES_INIT: usize = 1073741824; // 2 to the power of 30.
-pub const DATASET_BYTES_GROWTH: usize = 8388608; // 2 to the power of 23.
-pub const CACHE_BYTES_INIT: usize = 16777216; // 2 to the power of 24.
-pub const CACHE_BYTES_GROWTH: usize = 131072; // 2 to the power of 17.
-pub const CACHE_MULTIPLIER: usize = 1024;
-pub const MIX_BYTES: usize = 128;
-pub const WORD_BYTES: usize = 4;
-pub const HASH_BYTES: usize = 64;
-pub const DATASET_PARENTS: usize = 256;
-pub const CACHE_ROUNDS: usize = 3;
-pub const ACCESSES: usize = 64;
-pub const EPOCH_LENGTH: usize = 30_000;
-pub const ALGO_VERSION: u64 = 23;
-
-/// https://github.com/ethereumclassic/ECIPs/blob/master/_specs/ecip-1099.md
-pub const CLASSIC_EPOCH_LENGTH: usize = 60_000;
-pub const ETCHASH_FORK_BLOCK: u64 = 11_700_000;
-
 /// Get the cache size required given the block number.
 pub fn get_cache_size(epoch: usize) -> usize {
+    if epoch < EPOCH_MAX {
+        return CACHE_SIZES[epoch];
+    }
     let mut sz = CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * epoch;
     sz -= HASH_BYTES;
     while !is_prime(sz / HASH_BYTES) {
@@ -46,6 +37,9 @@ pub fn get_cache_size(epoch: usize) -> usize {
 
 /// Get the full dataset size given the block number.
 pub fn get_full_size(epoch: usize) -> usize {
+    if epoch < EPOCH_MAX {
+        return DATASET_SIZES[epoch];
+    }
     let mut sz = DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * epoch;
     sz -= MIX_BYTES;
     while !is_prime(sz / MIX_BYTES) {
