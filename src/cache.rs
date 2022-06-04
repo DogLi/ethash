@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use ethereum_types::{H256, H64};
+use ethereum_types::{BigEndianHash, H256, H64, U512};
 use memmap::{Mmap, MmapMut};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
@@ -137,9 +137,38 @@ impl NodeCache {
 /// Computation result
 pub struct ProofOfWork {
     /// Difficulty boundary
-    pub value: U256,
+    pub value: H256,
     /// Mix
     pub mix_hash: H256,
+}
+
+impl ProofOfWork {
+    pub fn difficulty(&self) -> U256 {
+        boundary_to_difficulty(&self.value)
+    }
+}
+
+/// Convert an Ethash boundary to its original difficulty. Basically just `f(x) = 2^256 / x`.
+pub fn boundary_to_difficulty(boundary: &ethereum_types::H256) -> U256 {
+    difficulty_to_boundary_aux(&boundary.into_uint())
+}
+
+/// Convert an Ethash difficulty to the target boundary. Basically just `f(x) = 2^256 / x`.
+pub fn difficulty_to_boundary(difficulty: &U256) -> ethereum_types::H256 {
+    BigEndianHash::from_uint(&difficulty_to_boundary_aux(difficulty))
+}
+
+fn difficulty_to_boundary_aux<T: Into<U512>>(difficulty: T) -> ethereum_types::U256 {
+    let difficulty = difficulty.into();
+
+    assert!(!difficulty.is_zero());
+
+    if difficulty == U512::one() {
+        U256::max_value()
+    } else {
+        const PROOF: &str = "difficulty > 1, so result never overflows 256 bits; qed";
+        U256::try_from((U512::one() << 256) / difficulty).expect(PROOF)
+    }
 }
 
 static CURRENT_CACHE: Lazy<RwLock<Option<NodeCache>>> = Lazy::new(|| RwLock::new(None));
@@ -166,7 +195,6 @@ impl HashManager {
     ) -> Result<ProofOfWork> {
         let cache = self.get_cache(block_number)?;
         let (mix_hash, value) = cache.compute_light(header_hash, nonce);
-        let value = U256::from(value.0);
         Ok(ProofOfWork { mix_hash, value })
     }
 
@@ -187,11 +215,19 @@ impl HashManager {
         // use the next epoch as current epoch
         let mut cache = CURRENT_CACHE.write();
         {
+            // check if current cache is ok
+            if let Some(cache) = cache.as_ref() {
+                if cache.epoch == epoch {
+                    return Ok(cache.clone());
+                }
+            }
+            // use next cache
             let mut next_cache = NEXT_CACHE.write();
             *cache = next_cache.clone();
             *next_cache = None;
         }
 
+        // check if current cache is ok
         let cache = match cache.as_mut() {
             None => {
                 let new_cache = NodeCache::generate(epoch, epoch_len, self.cache_dir.as_path())?;
@@ -236,21 +272,28 @@ mod test {
             is_classic: false,
         };
         // bare_hash of block#8996777 on ethereum mainnet
-        let block_number = 0x8947a9_u64;
+        let block_number = 14901035;
         let partial_header_hash =
-            "3c2e6623b1de8862a927eeeef2b6b25dea6e1d9dad88dca3c239be3959dc384a"
+            "91ec2ee5d84c0dd19d737e397c45c88b479c4c5cf64e82373e3c783d5bd0d383"
                 .parse()
                 .unwrap();
-        let nonce: H64 = "a5d3d0ccc8bb8a29".parse().unwrap();
+        let nonce: H64 = "000008e6de3d4a3b".parse().unwrap();
         let mix_hash_expect: H256 =
-            "543bc0769f7d5df30e7633f4a01552c2cee7baace8a6da37fddaa19e49e81209"
+            "83f061fbbf50fe5d1a0f2b772c80315a087282053bba64a0b35e144198bd4bad"
                 .parse()
                 .unwrap();
         let proof = hash_manager
             .compute_light(block_number, partial_header_hash, nonce)
             .unwrap();
-        assert_eq!(proof.mix_hash, mix_hash_expect);
-        println!("finish test eth verify, use time: {:?}", now.elapsed());
+        // assert_eq!(proof.mix_hash, mix_hash_expect);
+        // 351615387090
+        // 55705717822
+        // 20000000000
+        println!(
+            "finish test eth verify, use time: {:?}, diff: {:?}",
+            now.elapsed(),
+            proof.difficulty()
+        );
     }
 
     #[test]
@@ -276,6 +319,72 @@ mod test {
             .unwrap();
         println!("=================================   {:?}", now.elapsed());
         assert_eq!(proof.mix_hash, mix_hash_expect);
-        assert!(proof.value > share_diff)
+        assert!(boundary_to_difficulty(&proof.value) > share_diff)
+    }
+
+    #[test]
+    fn test_difficulty_to_boundary() {
+        use ethereum_types::{BigEndianHash, H256};
+        use std::str::FromStr;
+
+        assert_eq!(
+            difficulty_to_boundary(&U256::from(1)),
+            BigEndianHash::from_uint(&U256::max_value())
+        );
+        assert_eq!(
+            difficulty_to_boundary(&U256::from(2)),
+            H256::from_str("8000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
+        assert_eq!(
+            difficulty_to_boundary(&U256::from(4)),
+            H256::from_str("4000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
+        assert_eq!(
+            difficulty_to_boundary(&U256::from(32)),
+            H256::from_str("0800000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_difficulty_to_boundary_regression() {
+        use ethereum_types::H256;
+
+        // the last bit was originally being truncated when performing the conversion
+        // https://github.com/openethereum/openethereum/issues/8397
+        for difficulty in 1..9 {
+            assert_eq!(
+                U256::from(difficulty),
+                boundary_to_difficulty(&difficulty_to_boundary(&difficulty.into()))
+            );
+            assert_eq!(
+                H256::from_low_u64_be(difficulty),
+                difficulty_to_boundary(&boundary_to_difficulty(&H256::from_low_u64_be(difficulty)))
+            );
+            assert_eq!(
+                U256::from(difficulty),
+                boundary_to_difficulty(&BigEndianHash::from_uint(&boundary_to_difficulty(
+                    &H256::from_low_u64_be(difficulty)
+                ))),
+            );
+            assert_eq!(
+                H256::from_low_u64_be(difficulty),
+                difficulty_to_boundary(&difficulty_to_boundary(&difficulty.into()).into_uint())
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_difficulty_to_boundary_panics_on_zero() {
+        difficulty_to_boundary(&U256::from(0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_boundary_to_difficulty_panics_on_zero() {
+        boundary_to_difficulty(&ethereum_types::H256::zero());
     }
 }
