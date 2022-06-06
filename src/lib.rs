@@ -8,6 +8,7 @@ pub use proof::*;
 #[macro_use]
 extern crate log;
 extern crate core;
+pub use ethereum_types;
 
 use core::ops::BitXor;
 
