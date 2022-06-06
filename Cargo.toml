@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 byteorder = { version = "1", default-features = false }
-ethereum-types = { version = "0.12", default-features = false, features = ["rlp"] }
+ethereum-types = { version = "0.12", default-features = false, features = ["rlp", "serialize"] }
 lazy_static = { version = "1.4", default-features = false, optional = true, features = ["spin_no_std"] }
 log = "0.4"
 memmap = { version = "0.7.0" }
