@@ -55,7 +55,7 @@ impl NodeCache {
         Self::new(epoch, epoch_len, cache_dir)
     }
 
-    pub fn new_from_file(epoch: usize, epoch_len: usize, cache_dir: &Path) -> Result<Self> {
+    fn new_from_file(epoch: usize, epoch_len: usize, cache_dir: &Path) -> Result<Self> {
         let cache_size = crate::get_cache_size(epoch);
         let seed = crate::get_seedhash(epoch * epoch_len + 1);
         let file = Self::get_mmap_file(cache_dir, epoch, seed);
@@ -65,8 +65,12 @@ impl NodeCache {
             .create(false)
             .open(&file)?;
         let mmap = unsafe { Mmap::map(&file)? };
-        if mmap.len() != cache_size {
-            bail!("invalid cache file")
+        if mmap.len() != cache_size + 1 {
+            bail!("invalid cache file");
+        }
+        let finished_flag = mmap[cache_size];
+        if finished_flag != 1 {
+            bail!("invalid cache file, not finished");
         }
         let full_size = crate::get_full_size(epoch);
         Ok(Self {
@@ -76,7 +80,7 @@ impl NodeCache {
         })
     }
 
-    pub fn new(epoch: usize, epoch_len: usize, cache_dir: &Path) -> Result<Self> {
+    fn new(epoch: usize, epoch_len: usize, cache_dir: &Path) -> Result<Self> {
         let cache_size = crate::get_cache_size(epoch);
         let full_size = crate::get_full_size(epoch);
         let seed = crate::get_seedhash(epoch * epoch_len + 1);
@@ -86,7 +90,7 @@ impl NodeCache {
             .write(true)
             .create(true)
             .open(&file)?;
-        file.set_len(cache_size as u64)?;
+        file.set_len(cache_size as u64 + 1)?;
         let mut mmap = unsafe { MmapMut::map_mut(&file)? };
         make_cache(&mut mmap, seed);
         if let Err(e) = Self::flush(cache_dir, epoch, &mut mmap) {
@@ -130,7 +134,9 @@ impl NodeCache {
     }
 
     pub fn compute_light(&self, hash: H256, nonce: H64) -> (H256, H256) {
-        crate::hashimoto_light(hash, nonce, self.full_size, &self.cache)
+        let cache_len = self.cache.len();
+        let dag = &self.cache[0..cache_len - 1];
+        crate::hashimoto_light(hash, nonce, self.full_size, dag)
     }
 }
 
@@ -271,29 +277,24 @@ mod test {
             cache_dir: PathBuf::from("/tmp"),
             is_classic: false,
         };
-        // bare_hash of block#8996777 on ethereum mainnet
-        let block_number = 14901035;
+        //  { height: 14925590, diff: 8000000000, pow_hash: "0xe123ef54e16679347bf772bcaa76ad8b8ca67cf1d331644eee41dad227baf018", nonce: "0x019f836d60808af8", mix_digest: "0x8bea7ee173775346e724a9b080c5913ac4a7b8edd5dd04c85f22ed90172c3170", miner_wallet: "jazzdog", miner_id: "21164", miner_ip: 47.57.186.163, server_node: "x-pool-node-0", kind: ShareKind { block: false, inferior: true, invalid: Some(Stale)
+        let diff: u64 = 8000000000;
+        let block_number = 14925590;
         let partial_header_hash =
-            "91ec2ee5d84c0dd19d737e397c45c88b479c4c5cf64e82373e3c783d5bd0d383"
+            "e123ef54e16679347bf772bcaa76ad8b8ca67cf1d331644eee41dad227baf018"
                 .parse()
                 .unwrap();
-        let nonce: H64 = "000008e6de3d4a3b".parse().unwrap();
+        let nonce: H64 = "019f836d60808af8".parse().unwrap();
         let mix_hash_expect: H256 =
-            "83f061fbbf50fe5d1a0f2b772c80315a087282053bba64a0b35e144198bd4bad"
+            "8bea7ee173775346e724a9b080c5913ac4a7b8edd5dd04c85f22ed90172c3170"
                 .parse()
                 .unwrap();
         let proof = hash_manager
             .compute_light(block_number, partial_header_hash, nonce)
             .unwrap();
-        // assert_eq!(proof.mix_hash, mix_hash_expect);
-        // 351615387090
-        // 55705717822
-        // 20000000000
-        println!(
-            "finish test eth verify, use time: {:?}, diff: {:?}",
-            now.elapsed(),
-            proof.difficulty()
-        );
+        assert_eq!(proof.mix_hash, mix_hash_expect);
+        assert!(proof.difficulty() > U256::from(diff));
+        println!("=================================   {:?}", now.elapsed());
     }
 
     #[test]

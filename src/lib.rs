@@ -69,8 +69,9 @@ fn fill_sha256(input: &[u8], a: &mut [u8], from_index: usize) {
 
 /// Make an Ethash cache using the given seed.
 pub fn make_cache(cache: &mut [u8], seed: H256) {
-    assert!(cache.len() % HASH_BYTES == 0);
-    let n = cache.len() / HASH_BYTES;
+    let cache_len = cache.len() - 1;
+    assert_eq!(cache_len % HASH_BYTES, 0);
+    let n = cache_len / HASH_BYTES;
 
     fill_sha512(&seed[..], cache, 0);
 
@@ -92,6 +93,7 @@ pub fn make_cache(cache: &mut [u8], seed: H256) {
             fill_sha512(&r, cache, i * 64);
         }
     }
+    cache[cache_len] = 1;
 }
 
 pub const FNV_PRIME: u32 = 0x01000193;
